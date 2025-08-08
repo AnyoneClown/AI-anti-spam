@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import asyncio
 from typing import TYPE_CHECKING
 
@@ -58,7 +59,9 @@ def prometheus_middleware_factory(
     )
 
     @middleware
-    async def prometheus_middleware(request: Request, handler: Handler) -> StreamResponse:
+    async def prometheus_middleware(
+        request: Request, handler: Handler
+    ) -> StreamResponse:
         loop = asyncio.get_running_loop() or asyncio.get_event_loop()
 
         try:

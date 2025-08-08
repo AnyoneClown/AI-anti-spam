@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 from typing import TYPE_CHECKING, Any
 
 from aiogram import BaseMiddleware
@@ -37,7 +38,9 @@ class AuthMiddleware(BaseMiddleware):
 
         referrer = find_command_argument(message.text)
 
-        logger.info(f"new user registration | user_id: {user.id} | message: {message.text}")
+        logger.info(
+            f"new user registration | user_id: {user.id} | message: {message.text}"
+        )
 
         await add_user(session=session, user=user, referrer=referrer)
 

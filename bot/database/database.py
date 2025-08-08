@@ -1,9 +1,15 @@
 from __future__ import annotations
+
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from asyncpg import Connection
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 from bot.core.config import settings
 
@@ -25,6 +31,7 @@ def get_engine(url: URL | str = settings.database_url) -> AsyncEngine:
             "connection_class": CConnection,
         },
     )
+
 
 def get_sessionmaker(engine: AsyncEngine) -> async_sessionmaker[AsyncSession]:
     return async_sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)

@@ -14,6 +14,7 @@ pybabel update -i bot/locales/messages.pot -d bot/locales -D messages
 """
 
 from __future__ import annotations
+
 from typing import TYPE_CHECKING, Any
 
 from aiogram.utils.i18n.middleware import I18nMiddleware
@@ -36,6 +37,8 @@ class ACLMiddleware(I18nMiddleware):
         if not user:
             return self.DEFAULT_LANGUAGE_CODE
 
-        language_code: str | None = await get_language_code(session=session, user_id=user.id)
+        language_code: str | None = await get_language_code(
+            session=session, user_id=user.id
+        )
 
         return language_code or self.DEFAULT_LANGUAGE_CODE

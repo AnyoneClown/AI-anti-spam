@@ -43,11 +43,15 @@ class AmplitudeTelegramLogger(AbstractAnalyticsLogger):
             error = response.get("error")
             code = response.get("code")
 
-            logger.error(f"get error from amplitude api | error: {error} | code: {code}")
+            logger.error(
+                f"get error from amplitude api | error: {error} | code: {code}"
+            )
             msg = f"Error in amplitude api call | error: {error} | code: {code}"
             raise ValueError(msg)
 
-        logger.info(f"successfully send to Amplitude | server_upload_time: {response['server_upload_time']}")
+        logger.info(
+            f"successfully send to Amplitude | server_upload_time: {response['server_upload_time']}"
+        )
 
     async def log_event(
         self,

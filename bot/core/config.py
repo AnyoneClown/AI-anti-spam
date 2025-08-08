@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -15,7 +16,9 @@ DEFAULT_LOCALE = "en"
 
 
 class EnvBaseSettings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=".env", env_file_encoding="utf-8", extra="ignore"
+    )
 
 
 class WebhookSettings(EnvBaseSettings):
@@ -60,7 +63,9 @@ class DBSettings(EnvBaseSettings):
     def database_url_psycopg2(self) -> str:
         if self.DB_PASS:
             return f"postgresql://{self.DB_USER}:{self.DB_PASS}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
-        return f"postgresql://{self.DB_USER}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
+        return (
+            f"postgresql://{self.DB_USER}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
+        )
 
 
 class CacheSettings(EnvBaseSettings):
@@ -86,6 +91,8 @@ class Settings(BotSettings, DBSettings, CacheSettings):
     SENTRY_DSN: str | None = None
 
     AMPLITUDE_API_KEY: str  # or for example it could be POSTHOG_API_KEY
+    GEMINI_API_KEY: str
+    ADMIN_CHAT_ID: int
 
 
 settings = Settings()

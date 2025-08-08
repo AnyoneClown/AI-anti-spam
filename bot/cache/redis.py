@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 from functools import wraps
 from typing import TYPE_CHECKING, Any, TypeVar
 
@@ -65,7 +66,9 @@ def cached(
     if serializer is None:
         serializer = PickleSerializer()
 
-    def decorator(func: Callable[..., Awaitable[_Func]]) -> Callable[..., Awaitable[_Func]]:
+    def decorator(
+        func: Callable[..., Awaitable[_Func]]
+    ) -> Callable[..., Awaitable[_Func]]:
         @wraps(func)
         async def wrapper(*args: Args, **kwargs: Kwargs) -> Any:
             key = key_builder(*args, **kwargs)

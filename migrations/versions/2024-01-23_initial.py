@@ -5,6 +5,7 @@ Revises:
 Create Date: 2024-01-23 08:18:45.073567
 
 """
+
 from typing import Sequence, Union
 
 import sqlalchemy as sa
@@ -26,7 +27,12 @@ def upgrade() -> None:
         sa.Column("last_name", sa.String(), nullable=True),
         sa.Column("username", sa.String(), nullable=True),
         sa.Column("language_code", sa.String(), nullable=True),
-        sa.Column("created_at", sa.DateTime(), server_default=sa.text("TIMEZONE('utc', now())"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(),
+            server_default=sa.text("TIMEZONE('utc', now())"),
+            nullable=False,
+        ),
         sa.Column("is_admin", sa.Boolean(), nullable=False),
         sa.Column("is_suspicious", sa.Boolean(), nullable=False),
         sa.Column("is_block", sa.Boolean(), nullable=False),

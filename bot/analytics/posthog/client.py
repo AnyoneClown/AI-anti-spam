@@ -53,7 +53,9 @@ class PosthogTelegramLogger(AbstractAnalyticsLogger):
             msg = f"Error in CryptoPay API call | name: {name} | code: {code}"
             raise ValueError(msg)
 
-        logger.info(f"got response | ok: {response['ok']} | result: {response['result']}")
+        logger.info(
+            f"got response | ok: {response['ok']} | result: {response['result']}"
+        )
         return response
 
     async def log_event(

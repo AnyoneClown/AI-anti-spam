@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 from typing import TYPE_CHECKING
 
 from sqlalchemy import func, select, update
@@ -75,7 +76,11 @@ async def set_language_code(
     user_id: int,
     language_code: str,
 ) -> None:
-    stmt = update(UserModel).where(UserModel.id == user_id).values(language_code=language_code)
+    stmt = (
+        update(UserModel)
+        .where(UserModel.id == user_id)
+        .values(language_code=language_code)
+    )
 
     await session.execute(stmt)
     await session.commit()
@@ -116,3 +121,16 @@ async def get_user_count(session: AsyncSession) -> int:
 
     count = result.scalar_one_or_none() or 0
     return int(count)
+
+async def ban_user(session: AsyncSession, user_id: int) -> None:
+    stmt = update(UserModel).where(UserModel.id == user_id).values(is_block=True)
+    
+    await session.execute(stmt)
+    await session.commit()
+    
+@cached(key_builder=lambda session, user_id: build_key(user_id), ttl=1200)
+async def get_user_details(session: AsyncSession, user_id: int) -> UserModel | None:
+    """Fetches the full user model from the database."""
+    query = select(UserModel).filter_by(id=user_id)
+    result = await session.execute(query)
+    return result.scalar_one_or_none()

@@ -10,6 +10,7 @@ def register_middlewares(dp: Dispatcher) -> None:
     from .i18n import ACLMiddleware
     from .logging import LoggingMiddleware
     from .throttling import ThrottlingMiddleware
+    from .spam import SpamMiddleware
 
     dp.message.outer_middleware(ThrottlingMiddleware())
 
@@ -18,6 +19,8 @@ def register_middlewares(dp: Dispatcher) -> None:
     dp.update.outer_middleware(DatabaseMiddleware())
 
     dp.message.middleware(AuthMiddleware())
+
+    dp.message.outer_middleware(SpamMiddleware())
 
     ACLMiddleware(i18n=_i18n).setup(dp)
 
