@@ -122,12 +122,14 @@ async def get_user_count(session: AsyncSession) -> int:
     count = result.scalar_one_or_none() or 0
     return int(count)
 
+
 async def ban_user(session: AsyncSession, user_id: int) -> None:
     stmt = update(UserModel).where(UserModel.id == user_id).values(is_block=True)
-    
+
     await session.execute(stmt)
     await session.commit()
-    
+
+
 @cached(key_builder=lambda session, user_id: build_key(user_id), ttl=1200)
 async def get_user_details(session: AsyncSession, user_id: int) -> UserModel | None:
     """Fetches the full user model from the database."""

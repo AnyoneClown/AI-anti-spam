@@ -1,16 +1,17 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
 import json
+from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
-from loguru import logger
-from google import genai
+
 import pytz
 from aiogram.types import Message
-from bot.utils.notify import notify_admin
+from google import genai
+from loguru import logger
 
 from bot.core.config import settings
 from bot.services.users import ban_user, get_user_details
+from bot.utils.notify import notify_admin
 
 if TYPE_CHECKING:
     from aiogram.types import User
@@ -56,10 +57,11 @@ Text:
 
 client = genai.Client(api_key=settings.GEMINI_API_KEY)
 
+
 def detect_spam(text: str) -> dict:
     prompt = PROMPT_TEMPLATE.format(text=text)
     response = client.models.generate_content(
-        model="gemini-2.0-flash-lite",
+        model="gemini-2.5-flash-lite",
         contents=prompt,
         config=genai.types.GenerateContentConfig(
             response_mime_type="application/json",
@@ -87,21 +89,31 @@ def detect_spam(text: str) -> dict:
             "reason": "Failed to parse Gemini response",
         }
 
+
 async def _delete_message_safe(bot, message: Message) -> None:
     try:
         if bot:
-            await bot.delete_message(chat_id=message.chat.id, message_id=message.message_id)
+            await bot.delete_message(
+                chat_id=message.chat.id, message_id=message.message_id
+            )
     except Exception as e:
-        logger.warning(f"failed to delete message | chat_id: {message.chat.id} | msg_id: {message.message_id} | err: {e}")
+        logger.warning(
+            f"failed to delete message | chat_id: {message.chat.id} | msg_id: {message.message_id} | err: {e}"
+        )
 
-async def _ban_if_group_safe(bot, session: AsyncSession, message: Message, user_id: int) -> None:
+
+async def _ban_if_group_safe(
+    bot, session: AsyncSession, message: Message, user_id: int
+) -> None:
     try:
-        print("1")
         if bot and message.chat.type in ("group", "supergroup"):
             await bot.ban_chat_member(chat_id=message.chat.id, user_id=user_id)
             await ban_user(session, user_id)
     except Exception as e:
-        logger.warning(f"failed to ban user | chat_id: {message.chat.id} | user_id: {user_id} | err: {e}")
+        logger.warning(
+            f"failed to ban user | chat_id: {message.chat.id} | user_id: {user_id} | err: {e}"
+        )
+
 
 async def _notify_politic_safe(bot, message: Message, username: str) -> None:
     notify_text = f"Message from {username} is deleted: reason - politic is not allowed except Friday"
@@ -109,69 +121,86 @@ async def _notify_politic_safe(bot, message: Message, username: str) -> None:
         if bot:
             await bot.send_message(chat_id=message.chat.id, text=notify_text)
     except Exception as e:
-        logger.warning(f"failed to notify chat about political message | chat_id: {message.chat.id} | err: {e}")
+        logger.warning(
+            f"failed to notify chat about political message | chat_id: {message.chat.id} | err: {e}"
+        )
 
-async def process_moderation(bot, session: AsyncSession, message: Message, message_info: dict) -> bool:
+
+async def handle_politics(
+    bot, message: Message, message_info: dict, username: str
+) -> bool:
+    """Handles political messages. Returns True if handled."""
+    reason = message_info.get("reason")
+    kyiv_time = datetime.now(pytz.timezone("Europe/Kyiv"))
+
+    if message_info.get("isPolitic") and kyiv_time.weekday() != 4:  # 4 is Friday
+        await _delete_message_safe(bot, message)
+        await _notify_politic_safe(bot, message, username)
+
+        log_text = f"Politics Action (Deleted)\nUser: {username} ({message.from_user.id})\nChat: {message.chat.id}\nReason: {reason}\nMessage: {message.text}"
+        logger.info(log_text.replace("\n", " | "))
+        return True
+    return False
+
+
+async def _is_user_exempt_from_spam(session: AsyncSession, user_id: int) -> bool:
+    """Checks if a user is exempt from spam moderation (admin or old account)."""
+    user_details = await get_user_details(session, user_id)
+    if not user_details:
+        return False
+
+    if user_details.is_admin:
+        return True
+
+    account_age = datetime.now(pytz.utc) - user_details.created_at.replace(
+        tzinfo=pytz.utc
+    )
+    if account_age > timedelta(days=5):
+        return True
+
+    return False
+
+
+async def handle_spam(
+    bot,
+    session: AsyncSession,
+    message: Message,
+    message_info: dict,
+    user: "User",
+    username: str,
+) -> bool:
+    """Handles spam messages. Returns True if handled."""
+    if not message_info.get("isSpam"):
+        return False
+
+    is_exempt = await _is_user_exempt_from_spam(session, user.id)
+    if not is_exempt:
+        reason = message_info.get("reason")
+        await _delete_message_safe(bot, message)
+        await _ban_if_group_safe(bot, session, message, user.id)
+        log_text = f"Spam Action (Banned)\nUser: {username} ({user.id})\nChat: {message.chat.id}\nReason: {reason}\nMessage: {message.text}"
+        logger.info(log_text.replace("\n", " | "))
+        await notify_admin(bot, log_text)
+
+    return True
+
+
+async def process_moderation(
+    bot, session: AsyncSession, message: Message, message_info: dict
+) -> bool:
     """
     Returns True if the message was handled (deleted/acted on) and should stop propagation.
     """
-    if not message_info:
+    if not message_info or not message.from_user:
         return False
 
     user = message.from_user
-    if not user:
-        return False
-
     username = f"@{user.username}" if user.username else f"user {user.id}"
-    reason = message_info.get("reason")
-    kyiv_time = datetime.now(pytz.timezone("Europe/Kyiv"))
-    
-    if message_info.get("isPolitic") and not kyiv_time.weekday() == 4:
-        await _delete_message_safe(bot, message)
-        await _notify_politic_safe(bot, message, username)
 
-        log_text = f"Politics Action (Deleted)\nUser: {username} ({user.id})\nChat: {message.chat.id}\nReason: {reason}\nMessage: {message.text}"
-        logger.info(log_text.replace("\n", " | "))
-        await notify_admin(bot, log_text)
+    if await handle_politics(bot, message, message_info, username):
         return True
 
-    if message_info.get("isSpam"):
-        user_details = await get_user_details(session, user.id)
-        is_exempt = False
-        exemption_reason = ""
-
-        if user_details:
-            # Check if user is an admin
-            if user_details.is_admin:
-                is_exempt = True
-                exemption_reason = "User is an admin"
-            # Check if user account is older than 5 days
-            elif (datetime.now(pytz.utc) - user_details.created_at.replace(tzinfo=pytz.utc)) > timedelta(days=5):
-                is_exempt = True
-                exemption_reason = "User account is older than 5 days"
-
-        if is_exempt:
-            # User is exempt from ban, just log and notify
-            log_text = f"Spam Action (Deleted, Ban Exempt)\nUser: {username} ({user.id})\nChat: {message.chat.id}\nReason: {reason}\nExemption: {exemption_reason}\nMessage: {message.text}"
-            logger.info(log_text.replace("\n", " | "))
-            await notify_admin(bot, log_text)
-        else:
-            # User is not exempt, proceed with ban
-            await _delete_message_safe(bot, message)
-            await _ban_if_group_safe(bot, session, message, user.id)
-            log_text = f"Spam Action (Banned)\nUser: {username} ({user.id})\nChat: {message.chat.id}\nReason: {reason}\nMessage: {message.text}"
-            logger.info(log_text.replace("\n", " | "))
-            await notify_admin(bot, log_text)
-        
-        return True
-
-    if message_info.get("isPolitic") and not kyiv_time.weekday() == 4:
-        await _delete_message_safe(bot, message)
-        await _notify_politic_safe(bot, message, username)
-
-        log_text = f"Politics Action (Deleted)\nUser: {username} ({user.id})\nChat: {message.chat.id}\nReason: {reason}\nMessage: {message.text}"
-        logger.info(log_text.replace("\n", " | "))
-        await notify_admin(bot, log_text)
+    if await handle_spam(bot, session, message, message_info, user, username):
         return True
 
     return False
