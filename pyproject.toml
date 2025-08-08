@@ -14,6 +14,8 @@ python = "^3.10"
 sqlalchemy = "^2.0.38"
 pydantic = "^2.10.6"
 pydantic-settings = "^2.7.1"
+sqlalchemy-cockroachdb = "^2.0.3"
+pandas = "^2.3.1"
 
 [tool.poetry.group.bot.dependencies]
 aiogram = "^3.17.0"

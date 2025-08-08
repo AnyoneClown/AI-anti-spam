@@ -20,12 +20,11 @@ def get_engine(url: URL | str = settings.database_url) -> AsyncEngine:
     return create_async_engine(
         url=url,
         echo=settings.DEBUG,
-        pool_size=0,
+        isolation_level="SERIALIZABLE",
         connect_args={
             "connection_class": CConnection,
         },
     )
-
 
 def get_sessionmaker(engine: AsyncEngine) -> async_sessionmaker[AsyncSession]:
     return async_sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)

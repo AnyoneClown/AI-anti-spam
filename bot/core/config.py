@@ -45,9 +45,13 @@ class DBSettings(EnvBaseSettings):
     DB_USER: str = "postgres"
     DB_PASS: str | None = None
     DB_NAME: str = "postgres"
+    COCKROACHDB_URL: str | None = None
 
     @property
     def database_url(self) -> URL | str:
+        if self.COCKROACHDB_URL:
+            return self.COCKROACHDB_URL
+
         if self.DB_PASS:
             return f"postgresql+asyncpg://{self.DB_USER}:{self.DB_PASS}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
         return f"postgresql+asyncpg://{self.DB_USER}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
