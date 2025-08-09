@@ -19,9 +19,6 @@ from bot.middlewares.prometheus import prometheus_middleware_factory
 async def on_startup() -> None:
     logger.info("bot starting...")
 
-    register_middlewares(dp)
-
-    dp.include_router(get_handlers_router())
 
     if settings.USE_WEBHOOK:
         app.middlewares.append(prometheus_middleware_factory())
@@ -113,6 +110,9 @@ async def main() -> None:
     dp.startup.register(on_startup)
     dp.shutdown.register(on_shutdown)
 
+    register_middlewares(dp)
+    dp.include_router(get_handlers_router())
+    
     if settings.USE_WEBHOOK:
         await setup_webhook()
     else:
