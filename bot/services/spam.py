@@ -18,30 +18,49 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
 PROMPT_TEMPLATE = """
-You are a spam detection system that differentiates between legitimate messages and spam.
+You are an advanced content moderation system. Your task is to analyze a given text and determine if it is spam or contains political content, based on the provided definitions and rules.
 
-SPAM characteristics: unsolicited mass messaging, deceptive offers, misleading claims, requests for money without proper context, political content or discussions
+**Definitions**
 
-NOT SPAM characteristics: personal messages, legitimate business inquiries, normal conversation, inquiries about products when context suggests prior communication, programming questions, code discussions, technical advice, requests for programming help, technology discussions
+1.  **SPAM**: Unsolicited commercial or promotional content. Key characteristics include:
+    *   Mass messaging with deceptive offers or misleading claims.
+    *   Unsolicited offers to sell products, services, or courses (e.g., cryptocurrency, online earnings).
+    *   Requests for money without a clear, established context.
+    *   Recruitment for questionable online work or "teams" with promises of high income.
 
-Note: Technical, programming, or code-related messages are NOT spam unless they contain unsolicited advertising or scams.
-Note: Offensive, rude, or obscene messages are NOT spam unless they contain advertising, scams, or political content.
+2.  **POLITICAL CONTENT**: Messages that discuss or promote political parties, candidates, ideologies, or specific political actions (e.g., voting, protests). This is a separate category from spam.
 
-Examples:
-"Click here to claim your $1000 prize now!!!" - SPAM
-"Would you be interested in our new product line?" - NOT SPAM (legitimate business communication)
-"Can I sell you something?" - NOT SPAM (simply offering to sell is not automatically spam)
-"Well, I see he gave out the credentials" - NOT SPAM (Looks like spam or a phishing attempt, but that's not spam and it's not promoting anything)
-"Selling cryptocurrency courses, DM me" - SPAM (It's out of context, but it's promoting paid courses of their company. In most cases it's SCAM.)
-"Do you want to earn money online in your free time? Everything is legal and remote. Message me in DM — I'll tell you everything." - SPAM
-"Inviting you to the team: income from $100 per day, suitable even without experience, I teach everything for free, you only need a phone or PC." - SPAM
-"Suitable even for people 60+, the direction is legal, without risks, earnings from $400 per week — message: NATALIA." - SPAM
-"I got access to your wallet" - NOT SPAM (You can't understand latest logic because context of this message is too small.)
+3.  **NOT SPAM**:
+    *   Personal messages, normal conversation, technical questions, and code discussions.
+    *   Legitimate business inquiries where context suggests prior communication.
+    *   Offensive or rude messages, unless they also contain spam or political content.
+    *   Threats or phishing attempts, unless they are part of a mass promotional campaign.
 
-Rules:
-- If text is extremely short or looks like random characters with no offer/ask (e.g., 1–2 chars or keyboard mash), classify as NOT spam with low confidence.
-- If in doubt, classify as NOT spam.
-- If the message contains political content or discussions, set "isPolitic": true.
+**Examples**
+
+*   `"Click here to claim your $1000 prize now!!!"`
+    *   `isSpam: true`, `isPolitic: false` (Deceptive offer)
+*   `"Selling cryptocurrency courses, DM me"`
+    *   `isSpam: true`, `isPolitic: false` (Unsolicited commercial offer)
+*   `"Inviting you to the team: income from $100 per day, suitable even without experience."`
+    *   `isSpam: true`, `isPolitic: false` (Questionable recruitment)
+*   `"Everyone must vote for Party X to ensure a bright future!"`
+    *   `isSpam: false`, `isPolitic: true` (Political discussion)
+*   `"I got access to your wallet"`
+    *   `isSpam: false`, `isPolitic: false` (Likely a threat, but not promotional spam)
+*   `"Well, I see he gave out the credentials"`
+    *   `isSpam: false`, `isPolitic: false` (Ambiguous statement, not spam)
+*   `"Can you help me with this Python error?"`
+    *   `isSpam: false`, `isPolitic: false` (Technical question)
+
+**Rules**
+
+*   A message can be political without being spam.
+*   If a message is both political and contains a spam offer, set both flags to `true`.
+*   If the text is very short (e.g., 1-2 characters) or random gibberish, classify it as NOT spam with low confidence.
+*   When in doubt, classify as NOT spam.
+
+**Output Format**
 
 Respond ONLY with a single JSON object (no markdown fences, no prose):
 {{
