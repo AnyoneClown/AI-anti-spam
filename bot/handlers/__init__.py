@@ -2,7 +2,7 @@ from aiogram import Router
 
 
 def get_handlers_router() -> Router:
-    from . import export_users, info, menu, start, support, capcha
+    from . import capcha, export_users, info, menu, start, support
 
     router = Router()
     router.include_router(start.router)

@@ -2,10 +2,8 @@ from __future__ import annotations
 
 import asyncio
 
-import sentry_sdk
 import uvloop
 from loguru import logger
-from sentry_sdk.integrations.loguru import LoggingLevels, LoguruIntegration
 
 from bot.core.config import settings
 from bot.core.loader import app, bot, dp
@@ -18,7 +16,6 @@ from bot.middlewares.prometheus import prometheus_middleware_factory
 
 async def on_startup() -> None:
     logger.info("bot starting...")
-
 
     if settings.USE_WEBHOOK:
         app.middlewares.append(prometheus_middleware_factory())
@@ -86,19 +83,6 @@ async def setup_webhook() -> None:
 
 
 async def main() -> None:
-    if settings.SENTRY_DSN:
-        sentry_loguru = LoguruIntegration(
-            level=LoggingLevels.INFO.value,
-            event_level=LoggingLevels.INFO.value,
-        )
-        sentry_sdk.init(
-            dsn=settings.SENTRY_DSN,
-            enable_tracing=True,
-            traces_sample_rate=1.0,
-            profiles_sample_rate=1.0,
-            integrations=[sentry_loguru],
-        )
-
     logger.add(
         "logs/telegram_bot.log",
         level="DEBUG",
@@ -112,7 +96,7 @@ async def main() -> None:
 
     register_middlewares(dp)
     dp.include_router(get_handlers_router())
-    
+
     if settings.USE_WEBHOOK:
         await setup_webhook()
     else:
