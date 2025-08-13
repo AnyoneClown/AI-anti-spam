@@ -117,13 +117,6 @@ async def start_captcha(bot: Bot, session: AsyncSession, chat_id: int, user):
     )
     & (F.old_chat_member.status != F.new_chat_member.status)
 )
-@router.chat_member(
-    F.chat.type.in_({"group", "supergroup"})
-    & F.new_chat_member.status.in_(
-        {ChatMemberStatus.MEMBER, ChatMemberStatus.RESTRICTED}
-    )
-    & (F.old_chat_member.status != F.new_chat_member.status)
-)
 async def on_user_joined(event: ChatMemberUpdated, bot: Bot, session: AsyncSession):
     # Log raw statuses for debugging
     logger.debug(
