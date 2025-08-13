@@ -10,6 +10,8 @@ from aiogram.types import (
     ChatPermissions,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
+    ChatJoinRequest,
+    Message
 )
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -25,6 +27,7 @@ router.callback_query.middleware(DatabaseMiddleware())
 router.chat_member.middleware(DatabaseMiddleware())
 
 CAPTCHA_TTL = 65
+CAPTCHA_STARTED_TTL = 90
 
 
 def _captcha_key(chat_id: int, user_id: int) -> str:
@@ -49,36 +52,27 @@ def generate_captcha():
     keyboard = InlineKeyboardMarkup(inline_keyboard=[buttons])
     return question, keyboard, correct_answer
 
-
-@router.chat_member(
-    F.chat.type.in_({"group", "supergroup"})
-    & (F.old_chat_member.is_member == False)
-    & (F.new_chat_member.is_member == True)
-    & F.new_chat_member.status.in_(
-        {ChatMemberStatus.MEMBER, ChatMemberStatus.RESTRICTED}
-    )
-)
-async def on_user_joined(event: ChatMemberUpdated, bot: Bot, session: AsyncSession):
-    user = event.new_chat_member.user
-    chat_id = event.chat.id
+async def start_captcha(bot: Bot, session: AsyncSession, chat_id: int, user):
     if user.is_bot:
         return
 
-    logger.info(
-        f"Captcha Action (Start) user={user.id} chat={chat_id} name='{user.full_name}' status={event.new_chat_member.status}"
-    )
+    # Dedupe (avoid double trigger from message + chat_member)
+    started_key = f"captcha_started:{chat_id}:{user.id}"
+    if await redis_client.get(started_key):
+        return
+    await redis_client.set(started_key, 1, ex=CAPTCHA_STARTED_TTL)
 
+    logger.info(f"Captcha Action (Start) user={user.id} chat={chat_id} name='{user.full_name}'")
+
+    # Restrict (ignore errors but continue)
     try:
         await bot.restrict_chat_member(
             chat_id=chat_id,
             user_id=user.id,
-            permissions=ChatPermissions(),
+            permissions=ChatPermissions(),  # no rights
         )
     except Exception as e:
-        logger.error(
-            f"Captcha Action (Error) user={user.id} chat={chat_id} step=restrict error='{e}'"
-        )
-        return
+        logger.warning(f"Captcha Action (Warn) user={user.id} chat={chat_id} step=restrict error='{e}'")
 
     question, keyboard, correct_answer = generate_captcha()
     try:
@@ -88,9 +82,7 @@ async def on_user_joined(event: ChatMemberUpdated, bot: Bot, session: AsyncSessi
             reply_markup=keyboard,
         )
     except Exception as e:
-        logger.error(
-            f"Captcha Action (Error) user={user.id} chat={chat_id} step=send_message error='{e}'"
-        )
+        logger.error(f"Captcha Action (Error) user={user.id} chat={chat_id} step=send_message error='{e}'")
         return
 
     redis_key = _captcha_key(chat_id, user.id)
@@ -109,6 +101,39 @@ async def on_user_joined(event: ChatMemberUpdated, bot: Bot, session: AsyncSessi
     asyncio.create_task(
         check_verification_timeout(bot, chat_id, user.id, message.message_id, session)
     )
+
+@router.chat_member(
+    F.chat.type.in_({"group", "supergroup"})
+    & F.new_chat_member.status.in_({ChatMemberStatus.MEMBER, ChatMemberStatus.RESTRICTED})
+    & (F.old_chat_member.status != F.new_chat_member.status)
+)
+@router.chat_member(
+    F.chat.type.in_({"group", "supergroup"})
+    & F.new_chat_member.status.in_({ChatMemberStatus.MEMBER, ChatMemberStatus.RESTRICTED})
+    & (F.old_chat_member.status != F.new_chat_member.status)
+)
+async def on_user_joined(event: ChatMemberUpdated, bot: Bot, session: AsyncSession):
+    # Log raw statuses for debugging
+    logger.debug(
+        f"ChatMemberUpdate received chat={event.chat.id} old={event.old_chat_member.status} new={event.new_chat_member.status} user={event.new_chat_member.user.id}"
+    )
+    await start_captcha(bot, session, event.chat.id, event.new_chat_member.user)
+
+# Fallback: message-based (covers ordinary joins/invites)
+@router.message(F.new_chat_members)
+async def on_new_members_message(message: Message, bot: Bot, session: AsyncSession):
+    for user in message.new_chat_members:
+        await start_captcha(bot, session, message.chat.id, user)
+
+# Join request (if chat has "Approve new members")
+@router.chat_join_request()
+async def on_join_request(req: ChatJoinRequest, bot: Bot, session: AsyncSession):
+    try:
+        await bot.approve_chat_join_request(req.chat.id, req.from_user.id)
+    except Exception as e:
+        logger.error(f"JoinRequest approve failed chat={req.chat.id} user={req.from_user.id} error='{e}'")
+        return
+    await start_captcha(bot, session, req.chat.id, req.from_user)
 
 
 async def check_verification_timeout(
