@@ -132,7 +132,6 @@ async def on_new_members_message(message: Message, bot: Bot, session: AsyncSessi
         await start_captcha(bot, session, message.chat.id, user)
 
 
-# Join request (if chat has "Approve new members")
 @router.chat_join_request()
 async def on_join_request(req: ChatJoinRequest, bot: Bot, session: AsyncSession):
     try:
@@ -204,10 +203,6 @@ async def process_captcha_callback(
                 can_send_other_messages=True,
                 can_add_web_page_previews=True,
             ),
-        )
-        await notify_admin(
-            bot,
-            f"Captcha Action (Passed)\nUser: {user_id}\nChat: {chat_id}",
         )
         await query.answer("Verification passed!")
     else:
