@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "telegram-bot-template"
 version = "2.3.5"
-description = "Best way to create a scalable telegram bot with analytics"
+description = "Telegram group captcha bot"
 homepage = "https://github.com/donBarbos/telegram-bot-template"
 repository = "https://github.com/donBarbos/telegram-bot-template"
 authors = ["donBarbos <donbarbos@proton.me>"]

@@ -1,7 +1,5 @@
-include .env
+-include .env
 export
-
-LOCALES = bot/locales
 
 .PHONY: help
 
@@ -33,7 +31,7 @@ compose-ps: ## docker compose ps
 	docker compose ps
 
 compose-exec: ## Exec command in app container
-	docker compose exec app $(args)
+	docker compose exec bot $(args)
 
 logs:
 	docker compose logs $(args) -f
@@ -73,32 +71,3 @@ clean: ## Delete all temporary and generated files
 	@find . -name '.pytest_cache' -exec rm -rf {} +
 	@find . -name '.ipynb_checkpoints' -exec rm -rf {} +
 .PHONY: clean
-
-# BACKUPS
-backup:
-	docker compose exec bot scripts/postgres/backup
-.PHONY: backup
-
-mount-docker-backup:
-	docker cp app_db:/backups/$(args) ./$(args)
-.PHONY: mount-docker-backup
-
-restore:
-	docker compose exec app_db scripts/postgres/restore $(args)
-.PHONY: restore
-
-# I18N
-babel-extract: ## Extracts translatable strings from the source code into a .pot file
-	@poetry run pybabel extract --input-dirs=. -o $(LOCALES)/messages.pot
-.PHONY: locales-extract
-
-babel-update: ## Updates .pot files by merging changed strings into the existing .pot files
-	@poetry run pybabel update -d $(LOCALES) -i $(LOCALES)/messages.pot
-.PHONY: locales-update
-
-babel-compile: ## Compiles translation .po files into binary .mo files
-	@poetry run pybabel compile -d $(LOCALES)
-.PHONY: locales-compile
-
-babel: extract update
-.PHONY: babel

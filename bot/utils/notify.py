@@ -18,7 +18,7 @@ async def notify_admin(bot: Bot | None, text: str) -> None:
 
     admin_id = settings.ADMIN_CHAT_ID
     if not admin_id:
-        logger.warning("ADMIN_USER_ID not set in config, cannot send notification.")
+        logger.warning("ADMIN_CHAT_ID not set in config, cannot send notification.")
         return
 
     try:

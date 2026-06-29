@@ -7,28 +7,46 @@ services:
     container_name: ${COMPOSE_PROJECT_NAME}-bot
     restart: always
     env_file:
-      - .env
+      - path: .env
+        required: false
     ports:
       - ${WEBHOOK_PORT}:${WEBHOOK_PORT}
     networks:
       - app
       - monitoring
     depends_on:
-      - redis
+      migrator:
+        condition: service_completed_successfully
+      redis:
+        condition: service_started
+
+  migrator:
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+    image: bot:latest
+    container_name: ${COMPOSE_PROJECT_NAME}-migrator
+    restart: "no"
+    env_file:
+      - path: .env
+        required: false
+    command: alembic upgrade head
+    networks:
+      - app
 
   redis:
     image: redis:7-alpine
     container_name: ${COMPOSE_PROJECT_NAME}-redis
     restart: always
-    env_file:
-      - .env
+    environment:
+      REDIS_PASS: ${REDIS_PASS:-}
     ports:
       - ${REDIS_PORT}:${REDIS_PORT}
     networks:
       - app
     volumes:
       - redis-data:/bitnami/redis/data
-    command: /bin/sh -c 'if [ -n "$REDIS_PASS" ]; then redis-server --requirepass "$REDIS_PASS"; else redis-server; fi'
+    command: /bin/sh -c 'if [ -n "$$REDIS_PASS" ]; then redis-server --requirepass "$$REDIS_PASS"; else redis-server; fi'
 
 
 networks:
@@ -38,7 +56,4 @@ networks:
     driver: bridge
 
 volumes:
-  backups-data: {}
   redis-data: {}
-  prometheus-data: {}
-  grafana-data: {}

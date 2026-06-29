@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 
+from aiogram.types import BotCommandScopeDefault
 import uvloop
 from loguru import logger
 
@@ -9,7 +10,6 @@ from bot.core.config import settings
 from bot.core.loader import app, bot, dp
 from bot.handlers import get_handlers_router
 from bot.handlers.metrics import MetricsView
-from bot.keyboards.default_commands import remove_default_commands, set_default_commands
 from bot.middlewares import register_middlewares
 from bot.middlewares.prometheus import prometheus_middleware_factory
 
@@ -21,7 +21,7 @@ async def on_startup() -> None:
         app.middlewares.append(prometheus_middleware_factory())
         app.router.add_route("GET", "/metrics", MetricsView)
 
-    await set_default_commands(bot)
+    await bot.delete_my_commands(scope=BotCommandScopeDefault())
 
     bot_info = await bot.get_me()
 
@@ -44,8 +44,6 @@ async def on_startup() -> None:
 
 async def on_shutdown() -> None:
     logger.info("bot stopping...")
-
-    await remove_default_commands(bot)
 
     await dp.storage.close()
     await dp.fsm.storage.close()

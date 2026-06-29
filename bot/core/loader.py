@@ -3,11 +3,10 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.base import DefaultKeyBuilder
 from aiogram.fsm.storage.redis import RedisStorage
-from aiogram.utils.i18n.core import I18n
 from aiohttp import web
 from redis.asyncio import ConnectionPool, Redis
 
-from bot.core.config import DEFAULT_LOCALE, I18N_DOMAIN, LOCALES_DIR, settings
+from bot.core.config import settings
 
 app = web.Application()
 
@@ -30,7 +29,5 @@ storage = RedisStorage(
 )
 
 dp = Dispatcher(storage=storage)
-
-i18n: I18n = I18n(path=LOCALES_DIR, default_locale=DEFAULT_LOCALE, domain=I18N_DOMAIN)
 
 DEBUG = settings.DEBUG

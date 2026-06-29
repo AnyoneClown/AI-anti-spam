@@ -1,19 +1,6 @@
 from __future__ import annotations
 
-from pathlib import Path
-from typing import TYPE_CHECKING
-
 from pydantic_settings import BaseSettings, SettingsConfigDict
-
-if TYPE_CHECKING:
-    from sqlalchemy.engine.url import URL
-
-DIR = Path(__file__).absolute().parent.parent.parent
-BOT_DIR = Path(__file__).absolute().parent.parent
-LOCALES_DIR = f"{BOT_DIR}/locales"
-I18N_DOMAIN = "messages"
-DEFAULT_LOCALE = "en"
-
 
 class EnvBaseSettings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -43,29 +30,11 @@ class BotSettings(WebhookSettings):
 
 
 class DBSettings(EnvBaseSettings):
-    DB_HOST: str = "postgres"
-    DB_PORT: int = 5432
-    DB_USER: str = "postgres"
-    DB_PASS: str | None = None
-    DB_NAME: str = "postgres"
-    COCKROACHDB_URL: str | None = None
+    COCKROACHDB_URL: str
 
     @property
-    def database_url(self) -> URL | str:
-        if self.COCKROACHDB_URL:
-            return self.COCKROACHDB_URL
-
-        if self.DB_PASS:
-            return f"postgresql+asyncpg://{self.DB_USER}:{self.DB_PASS}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
-        return f"postgresql+asyncpg://{self.DB_USER}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
-
-    @property
-    def database_url_psycopg2(self) -> str:
-        if self.DB_PASS:
-            return f"postgresql://{self.DB_USER}:{self.DB_PASS}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
-        return (
-            f"postgresql://{self.DB_USER}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
-        )
+    def database_url(self) -> str:
+        return self.COCKROACHDB_URL
 
 
 class CacheSettings(EnvBaseSettings):
@@ -88,11 +57,7 @@ class CacheSettings(EnvBaseSettings):
 class Settings(BotSettings, DBSettings, CacheSettings):
     DEBUG: bool = False
 
-    SENTRY_DSN: str | None = None
-
-    AMPLITUDE_API_KEY: str  # or for example it could be POSTHOG_API_KEY
-    GEMINI_API_KEY: str
-    ADMIN_CHAT_ID: int
+    ADMIN_CHAT_ID: int | None = None
 
 
 settings = Settings()

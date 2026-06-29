@@ -17,14 +17,13 @@ from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.core.loader import redis_client
+from bot.database.database import sessionmaker
 from bot.middlewares.database import DatabaseMiddleware
 from bot.services.users import ban_user
 from bot.utils.notify import notify_admin
 
 router = Router()
-router.message.middleware(DatabaseMiddleware())
 router.callback_query.middleware(DatabaseMiddleware())
-router.chat_member.middleware(DatabaseMiddleware())
 
 CAPTCHA_TTL = 65
 CAPTCHA_STARTED_TTL = 90
@@ -42,7 +41,6 @@ def generate_captcha():
     while len(answers) < 3:
         answers.add(correct_answer + random.randint(-5, 5) or 1)
     shuffled_answers = random.sample(list(answers), len(answers))
-    question = f"To continue, please solve this: {a} + {b} = ?"
     buttons = [
         InlineKeyboardButton(
             text=str(ans), callback_data=f"captcha_{ans}_{correct_answer}"
@@ -50,10 +48,11 @@ def generate_captcha():
         for ans in shuffled_answers
     ]
     keyboard = InlineKeyboardMarkup(inline_keyboard=[buttons])
+    question = f"Щоб продовжити, розв'яжіть приклад: {a} + {b} = ?"
     return question, keyboard, correct_answer
 
 
-async def start_captcha(bot: Bot, session: AsyncSession, chat_id: int, user):
+async def start_captcha(bot: Bot, chat_id: int, user):
     if user.is_bot:
         return
 
@@ -83,7 +82,7 @@ async def start_captcha(bot: Bot, session: AsyncSession, chat_id: int, user):
     try:
         message = await bot.send_message(
             chat_id=chat_id,
-            text=f"Welcome, {user.full_name}!\n\n{question}",
+            text=f"Вітаємо, {user.full_name}!\n\n{question}",
             reply_markup=keyboard,
         )
     except Exception as e:
@@ -106,7 +105,7 @@ async def start_captcha(bot: Bot, session: AsyncSession, chat_id: int, user):
     )
 
     asyncio.create_task(
-        check_verification_timeout(bot, chat_id, user.id, message.message_id, session)
+        check_verification_timeout(bot, chat_id, user.id, message.message_id)
     )
 
 
@@ -117,23 +116,23 @@ async def start_captcha(bot: Bot, session: AsyncSession, chat_id: int, user):
     )
     & (F.old_chat_member.status != F.new_chat_member.status)
 )
-async def on_user_joined(event: ChatMemberUpdated, bot: Bot, session: AsyncSession):
+async def on_user_joined(event: ChatMemberUpdated, bot: Bot):
     # Log raw statuses for debugging
     logger.debug(
         f"ChatMemberUpdate received chat={event.chat.id} old={event.old_chat_member.status} new={event.new_chat_member.status} user={event.new_chat_member.user.id}"
     )
-    await start_captcha(bot, session, event.chat.id, event.new_chat_member.user)
+    await start_captcha(bot, event.chat.id, event.new_chat_member.user)
 
 
 # Fallback: message-based (covers ordinary joins/invites)
 @router.message(F.new_chat_members)
-async def on_new_members_message(message: Message, bot: Bot, session: AsyncSession):
+async def on_new_members_message(message: Message, bot: Bot):
     for user in message.new_chat_members:
-        await start_captcha(bot, session, message.chat.id, user)
+        await start_captcha(bot, message.chat.id, user)
 
 
 @router.chat_join_request()
-async def on_join_request(req: ChatJoinRequest, bot: Bot, session: AsyncSession):
+async def on_join_request(req: ChatJoinRequest, bot: Bot):
     try:
         await bot.approve_chat_join_request(req.chat.id, req.from_user.id)
     except Exception as e:
@@ -141,11 +140,11 @@ async def on_join_request(req: ChatJoinRequest, bot: Bot, session: AsyncSession)
             f"JoinRequest approve failed chat={req.chat.id} user={req.from_user.id} error='{e}'"
         )
         return
-    await start_captcha(bot, session, req.chat.id, req.from_user)
+    await start_captcha(bot, req.chat.id, req.from_user)
 
 
 async def check_verification_timeout(
-    bot: Bot, chat_id: int, user_id: int, message_id: int, session: AsyncSession
+    bot: Bot, chat_id: int, user_id: int, message_id: int
 ):
     await asyncio.sleep(60)
     redis_key = _captcha_key(chat_id, user_id)
@@ -160,7 +159,8 @@ async def check_verification_timeout(
                 bot,
                 f"Captcha Action (Banned)\nUser: {user_id}\nChat: {chat_id}\nReason: timeout",
             )
-            await ban_user(session, user_id)
+            async with sessionmaker() as session:
+                await ban_user(session, user_id)
         except Exception as e:
             logger.error(
                 f"Captcha Action (Error) user={user_id} chat={chat_id} step=timeout_ban error='{e}'"
@@ -179,7 +179,7 @@ async def process_captcha_callback(
 
     raw_data = await redis_client.get(redis_key)
     if not raw_data:
-        await query.answer("Captcha expired or not yours.", show_alert=True)
+        await query.answer("Капча застаріла або належить не вам.", show_alert=True)
         return
 
     data = json.loads(raw_data)
@@ -204,7 +204,7 @@ async def process_captcha_callback(
                 can_add_web_page_previews=True,
             ),
         )
-        await query.answer("Verification passed!")
+        await query.answer("Перевірку пройдено!")
     else:
         logger.warning(
             f"Captcha Action (Banned) user={user_id} chat={chat_id} reason=wrong_answer"
@@ -215,4 +215,4 @@ async def process_captcha_callback(
             f"Captcha Action (Banned)\nUser: {user_id}\nChat: {chat_id}\nReason: wrong_answer",
         )
         await ban_user(session, user_id)
-        await query.answer("Incorrect answer. You have been banned.", show_alert=True)
+        await query.answer("Неправильна відповідь. Вас заблоковано.", show_alert=True)
