@@ -27,10 +27,15 @@ router.callback_query.middleware(DatabaseMiddleware())
 
 CAPTCHA_TTL = 65
 CAPTCHA_STARTED_TTL = 90
+JOIN_BAN_TTL = 300
 
 
 def _captcha_key(chat_id: int, user_id: int) -> str:
     return f"captcha:{chat_id}:{user_id}"
+
+
+def _join_banned_key(chat_id: int, user_id: int) -> str:
+    return f"captcha_join_banned:{chat_id}:{user_id}"
 
 
 async def _remember_join_message(
@@ -44,6 +49,9 @@ async def _remember_join_message(
     data = json.loads(raw_data)
     data["join_message_id"] = join_message_id
     await redis_client.set(redis_key, json.dumps(data), ex=CAPTCHA_TTL)
+    logger.debug(
+        f"Captcha Action (Join Message Saved) user={user_id} chat={chat_id} message_id={join_message_id}"
+    )
 
 
 async def _delete_message_safe(bot: Bot, chat_id: int, message_id: int | None) -> None:
@@ -51,8 +59,17 @@ async def _delete_message_safe(bot: Bot, chat_id: int, message_id: int | None) -
         return
     try:
         await bot.delete_message(chat_id=chat_id, message_id=message_id)
-    except Exception:
-        pass
+        logger.debug(
+            f"Captcha Action (Message Deleted) chat={chat_id} message_id={message_id}"
+        )
+    except Exception as e:
+        logger.warning(
+            f"Captcha Action (Delete Failed) chat={chat_id} message_id={message_id} error='{e}'"
+        )
+
+
+async def _mark_join_banned(chat_id: int, user_id: int) -> None:
+    await redis_client.set(_join_banned_key(chat_id, user_id), 1, ex=JOIN_BAN_TTL)
 
 
 def generate_captcha():
@@ -155,6 +172,9 @@ async def on_user_joined(event: ChatMemberUpdated, bot: Bot):
 @router.message(F.new_chat_members)
 async def on_new_members_message(message: Message, bot: Bot):
     for user in message.new_chat_members:
+        if await redis_client.get(_join_banned_key(message.chat.id, user.id)):
+            await _delete_message_safe(bot, message.chat.id, message.message_id)
+            continue
         await start_captcha(bot, message.chat.id, user, message.message_id)
 
 
@@ -182,6 +202,7 @@ async def check_verification_timeout(
             f"Captcha Action (Banned) user={user_id} chat={chat_id} reason=timeout"
         )
         try:
+            await _mark_join_banned(chat_id, user_id)
             await bot.ban_chat_member(chat_id=chat_id, user_id=user_id)
             await _delete_message_safe(bot, chat_id, data.get("message_id", message_id))
             await _delete_message_safe(bot, chat_id, data.get("join_message_id"))
@@ -237,6 +258,7 @@ async def process_captcha_callback(
         logger.warning(
             f"Captcha Action (Banned) user={user_id} chat={chat_id} reason=wrong_answer"
         )
+        await _mark_join_banned(chat_id, user_id)
         await bot.ban_chat_member(chat_id=chat_id, user_id=user_id)
         await _delete_message_safe(bot, chat_id, join_message_id)
         await notify_admin(
