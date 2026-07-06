@@ -33,6 +33,28 @@ def _captcha_key(chat_id: int, user_id: int) -> str:
     return f"captcha:{chat_id}:{user_id}"
 
 
+async def _remember_join_message(
+    chat_id: int, user_id: int, join_message_id: int
+) -> None:
+    redis_key = _captcha_key(chat_id, user_id)
+    raw_data = await redis_client.get(redis_key)
+    if not raw_data:
+        return
+
+    data = json.loads(raw_data)
+    data["join_message_id"] = join_message_id
+    await redis_client.set(redis_key, json.dumps(data), ex=CAPTCHA_TTL)
+
+
+async def _delete_message_safe(bot: Bot, chat_id: int, message_id: int | None) -> None:
+    if not message_id:
+        return
+    try:
+        await bot.delete_message(chat_id=chat_id, message_id=message_id)
+    except Exception:
+        pass
+
+
 def generate_captcha():
     a = random.randint(1, 10)
     b = random.randint(1, 10)
@@ -52,13 +74,17 @@ def generate_captcha():
     return question, keyboard, correct_answer
 
 
-async def start_captcha(bot: Bot, chat_id: int, user):
+async def start_captcha(
+    bot: Bot, chat_id: int, user, join_message_id: int | None = None
+):
     if user.is_bot:
         return
 
     # Dedupe (avoid double trigger from message + chat_member)
     started_key = f"captcha_started:{chat_id}:{user.id}"
     if await redis_client.get(started_key):
+        if join_message_id:
+            await _remember_join_message(chat_id, user.id, join_message_id)
         return
     await redis_client.set(started_key, 1, ex=CAPTCHA_STARTED_TTL)
 
@@ -99,6 +125,7 @@ async def start_captcha(bot: Bot, chat_id: int, user):
                 "chat_id": chat_id,
                 "message_id": message.message_id,
                 "correct_answer": correct_answer,
+                "join_message_id": join_message_id,
             }
         ),
         ex=CAPTCHA_TTL,
@@ -128,7 +155,7 @@ async def on_user_joined(event: ChatMemberUpdated, bot: Bot):
 @router.message(F.new_chat_members)
 async def on_new_members_message(message: Message, bot: Bot):
     for user in message.new_chat_members:
-        await start_captcha(bot, message.chat.id, user)
+        await start_captcha(bot, message.chat.id, user, message.message_id)
 
 
 @router.chat_join_request()
@@ -148,13 +175,16 @@ async def check_verification_timeout(
 ):
     await asyncio.sleep(60)
     redis_key = _captcha_key(chat_id, user_id)
-    if await redis_client.exists(redis_key):
+    raw_data = await redis_client.get(redis_key)
+    if raw_data:
+        data = json.loads(raw_data)
         logger.warning(
             f"Captcha Action (Banned) user={user_id} chat={chat_id} reason=timeout"
         )
         try:
             await bot.ban_chat_member(chat_id=chat_id, user_id=user_id)
-            await bot.delete_message(chat_id=chat_id, message_id=message_id)
+            await _delete_message_safe(bot, chat_id, data.get("message_id", message_id))
+            await _delete_message_safe(bot, chat_id, data.get("join_message_id"))
             await notify_admin(
                 bot,
                 f"Captcha Action (Banned)\nUser: {user_id}\nChat: {chat_id}\nReason: timeout",
@@ -184,13 +214,11 @@ async def process_captcha_callback(
 
     data = json.loads(raw_data)
     message_id = data["message_id"]
+    join_message_id = data.get("join_message_id")
     _, selected_answer, correct_answer = query.data.split("_")
 
     await redis_client.delete(redis_key)
-    try:
-        await bot.delete_message(chat_id=chat_id, message_id=message_id)
-    except Exception:
-        pass
+    await _delete_message_safe(bot, chat_id, message_id)
 
     if int(selected_answer) == int(correct_answer):
         logger.info(f"Captcha Action (Passed) user={user_id} chat={chat_id}")
@@ -210,6 +238,7 @@ async def process_captcha_callback(
             f"Captcha Action (Banned) user={user_id} chat={chat_id} reason=wrong_answer"
         )
         await bot.ban_chat_member(chat_id=chat_id, user_id=user_id)
+        await _delete_message_safe(bot, chat_id, join_message_id)
         await notify_admin(
             bot,
             f"Captcha Action (Banned)\nUser: {user_id}\nChat: {chat_id}\nReason: wrong_answer",
