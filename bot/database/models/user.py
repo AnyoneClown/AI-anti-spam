@@ -15,6 +15,7 @@ class UserModel(Base):
     username: Mapped[str | None]
     language_code: Mapped[str | None]
     referrer: Mapped[str | None]
+    chat_id: Mapped[int | None]
     created_at: Mapped[created_at]
 
     is_admin: Mapped[bool] = mapped_column(default=False)

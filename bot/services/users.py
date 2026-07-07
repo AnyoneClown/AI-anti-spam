@@ -103,6 +103,33 @@ async def set_is_admin(session: AsyncSession, user_id: int, is_admin: bool) -> N
     await session.commit()
 
 
+async def save_user_from_captcha(
+    session: AsyncSession,
+    user: User,
+    chat_id: int,
+) -> None:
+    user_model = await session.get(UserModel, user.id)
+    values = {
+        "first_name": user.first_name,
+        "last_name": user.last_name,
+        "username": user.username,
+        "language_code": user.language_code,
+        "is_premium": user.is_premium or False,
+        "chat_id": chat_id,
+        "is_block": False,
+    }
+
+    if user_model:
+        for key, value in values.items():
+            setattr(user_model, key, value)
+    else:
+        session.add(UserModel(id=user.id, referrer=None, **values))
+
+    await session.commit()
+    await clear_cache(user_exists, user.id)
+    await clear_cache(get_user_details, user.id)
+
+
 @cached(key_builder=lambda session: build_key())
 async def get_all_users(session: AsyncSession) -> list[UserModel]:
     query = select(UserModel)

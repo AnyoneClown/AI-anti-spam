@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from bot.core.loader import redis_client
 from bot.database.database import sessionmaker
 from bot.middlewares.database import DatabaseMiddleware
-from bot.services.users import ban_user
+from bot.services.users import ban_user, save_user_from_captcha
 from bot.utils.notify import notify_admin
 
 router = Router()
@@ -104,6 +104,9 @@ async def start_captcha(
             await _remember_join_message(chat_id, user.id, join_message_id)
         return
     await redis_client.set(started_key, 1, ex=CAPTCHA_STARTED_TTL)
+
+    async with sessionmaker() as session:
+        await save_user_from_captcha(session, user, chat_id)
 
     logger.info(
         f"Captcha Action (Start) user={user.id} chat={chat_id} name='{user.full_name}'"
