@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from bot.core.loader import redis_client
 from bot.database.database import sessionmaker
 from bot.middlewares.database import DatabaseMiddleware
+from bot.services.chat_configs import is_captcha_enabled
 from bot.services.users import ban_user, save_user_from_captcha
 from bot.utils.notify import notify_admin
 
@@ -96,6 +97,13 @@ async def start_captcha(
 ):
     if user.is_bot:
         return
+
+    async with sessionmaker() as session:
+        if not await is_captcha_enabled(session, chat_id):
+            logger.info(
+                f"Captcha Action (Skipped) user={user.id} chat={chat_id} reason=disabled"
+            )
+            return
 
     # Dedupe (avoid double trigger from message + chat_member)
     started_key = f"captcha_started:{chat_id}:{user.id}"

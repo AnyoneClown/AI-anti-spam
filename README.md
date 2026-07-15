@@ -2,6 +2,15 @@
 
 Telegram group captcha bot. New users are restricted until they solve a simple math captcha. Failed or expired captcha attempts are banned.
 
+Captcha protection is enabled by default. A group administrator can manage it from
+the group chat:
+
+```text
+/captcha status
+/captcha off
+/captcha on
+```
+
 ## Required `.env`
 
 Copy `.env.example` to `.env` and replace at least `BOT_TOKEN`.
